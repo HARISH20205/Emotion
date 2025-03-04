@@ -11,7 +11,7 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 from datasets import load_dataset
 
-nltk.download("stopwords")
+# nltk.download("stopwords")
 from nltk.corpus import stopwords
 
 train_data = pd.read_csv("data/train.csv")

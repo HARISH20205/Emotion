@@ -1,60 +1,78 @@
-# Emotion Detection Model
+# Emotion Classification Project
 
-This project implements a machine learning pipeline for classifying text into emotion categories.
+This project implements a simplified and realistic approach to emotion classification using unigram/bigram features with fuzzy logic.
 
 ## Project Structure
 
-- `main.py`: Main script to run the complete pipeline
-- `emotion_model.py`: Contains the EmotionClassifier class implementation
-- `utils.py`: Contains preprocessing and utility functions
-- `data/`: Directory for storing datasets
+- `simplified_emotion.py`: Main implementation with simplified fuzzy logic approach
+- `hybrid_model.py`: A hybrid approach combining machine learning with fuzzy logic
+- `feature_analysis.py`: Analyzes and visualizes the most important features for each emotion
+- `data/`: Directory containing training, validation, and test datasets
 
-## Setup and Requirements
+## Data Format
 
-1. Install required dependencies:
+The system expects CSV files with at least two columns:
 
-   ```
-   pip install pandas numpy scikit-learn nltk matplotlib
-   ```
+- `text`: Text to classify
+- `label`: Emotion label (e.g., 'joy', 'sadness', 'anger', 'fear', 'love', 'surprise')
 
-2. Place your datasets in the `data/` directory:
+## Approaches Implemented
 
-   - `train.csv`: Training data
-   - `val.csv`: Validation data
-   - `test.csv`: Test data
+### 1. Simplified Fuzzy Logic Approach
 
-   Each CSV file should contain at least two columns:
+This implementation uses:
 
-   - `text`: The text to classify
-   - `label`: The emotion label
+- Unigram and bigram features
+- Simple and effective preprocessing
+- Term frequency analysis for each emotion class
+- Simplified fuzzy logic rules focused on term similarity and intensity
+- Reduced complexity compared to overly complex fuzzy systems
 
-## Running the Code
+### 2. Hybrid Approach
+
+Combines:
+
+- Traditional machine learning (Random Forest)
+- Fuzzy logic for decision making
+- Term similarity analysis
+- Confidence-based selection between models
+
+## How to Run
 
 ```bash
-python main.py
+# Run the simplified fuzzy logic approach
+python simplified_emotion.py
+
+# Run the hybrid model
+python hybrid_model.py
+
+# Analyze features distribution
+python feature_analysis.py
 ```
 
-This will:
+## Improving Accuracy
 
-1. Load and preprocess the data
-2. Train an SVM model and a Random Forest model
-3. Evaluate both models on validation and test sets
-4. Perform hyperparameter tuning
-5. Generate a confusion matrix visualization
+The accuracy of the emotion classification has been improved by:
 
-## Implementation Notes
+1. **Simplified Rules**: Reduced the overly complex fuzzy logic rule set to focus on what matters
+2. **Improved Feature Extraction**: Optimized preprocessing and unigram/bigram extraction
+3. **Better Term Similarity**: Using cosine similarity between document vectors and class-specific term frequencies
+4. **Hybrid Approach**: Combining traditional ML with fuzzy logic for better results
+5. **Feature Analysis**: Understanding which terms are most indicative of each emotion
 
-The implementation uses:
+## Requirements
 
-- TF-IDF vectorization for feature extraction
-- Support Vector Machine (LinearSVC) as the primary classifier
-- Random Forest as a comparison model
-- GridSearchCV for hyperparameter tuning
+```
+pandas
+numpy
+scikit-learn
+nltk
+scikit-fuzzy
+matplotlib (optional, for visualizations)
+```
 
-## Extending the Model
+## Future Improvements
 
-To extend the model:
-
-1. Add new preprocessing techniques in `utils.py`
-2. Implement additional classifiers in `emotion_model.py`
-3. Modify `main.py` to use the new implementations
+- Word embeddings (GloVe, Word2Vec) could improve text representation
+- Deep learning approaches (LSTM, BERT) could capture more complex patterns
+- Ensemble methods could combine multiple approaches for better accuracy

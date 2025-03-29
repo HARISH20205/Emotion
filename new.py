@@ -11,11 +11,13 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 from datasets import load_dataset
 
-nltk.download("stopwords")
+# nltk.download("stopwords")
 from nltk.corpus import stopwords
 import pickle
 
-train_data = pd.read_csv("data/train.csv")
+train_data = pd.read_csv(
+    "data/train.csv",
+)
 val_data = pd.read_csv("data/val.csv")
 test_data = pd.read_csv("data/test.csv")
 
@@ -23,11 +25,12 @@ test_data = pd.read_csv("data/test.csv")
 # Enhanced preprocessing
 def preprocess_text(text):
     stop_words = set(stopwords.words("english"))
-    text = re.sub(r"[^a-zA-Z]", " ", text)  # Remove non-alphabetic characters
+    # Improved text cleaning
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
     tokens = text.lower().split()
-    tokens = [
-        word for word in tokens if word not in stop_words and len(word) > 2
-    ]  # Filter short words
+    # Keep more meaningful words
+    tokens = [word for word in tokens if word not in stop_words and len(word) > 1]
     return " ".join(tokens)
 
 
@@ -36,7 +39,12 @@ val_data["text"] = val_data["text"].apply(preprocess_text)
 test_data["text"] = test_data["text"].apply(preprocess_text)
 
 # Apply unigram and bigram embedding with improved parameters
-vectorizer = CountVectorizer(ngram_range=(2, 2), min_df=3, max_df=0.9)
+vectorizer = CountVectorizer(
+    ngram_range=(1, 3),  # Include unigrams, bigrams and trigrams
+    min_df=2,  # Reduce minimum document frequency
+    max_df=0.95,  # Increase maximum document frequency
+    max_features=5000,  # Limit vocabulary size to most important features
+)
 X_train = vectorizer.fit_transform(train_data["text"])
 X_val = vectorizer.transform(val_data["text"])
 X_test = vectorizer.transform(test_data["text"])
@@ -61,6 +69,24 @@ for emotion in range(6):  # Assuming 6 emotion classes
     else:
         emotion_term_freqs[emotion] = np.zeros(X_train.shape[1])
 
+
+# Add after emotion_term_freqs calculation
+def calculate_emotion_weights(X_train, y_train):
+    weights = np.zeros((6, X_train.shape[1]))
+    for emotion in range(6):
+        emotion_docs = X_train[y_train == emotion]
+        if emotion_docs.shape[0] > 0:
+            # Calculate TF-IDF like weights
+            term_freq = np.sum(emotion_docs, axis=0).A.flatten()
+            doc_freq = np.sum(emotion_docs > 0, axis=0).A.flatten()
+            weights[emotion] = (term_freq / emotion_docs.shape[0]) * np.log(
+                emotion_docs.shape[0] / (doc_freq + 1)
+            )
+    return weights
+
+
+emotion_weights = calculate_emotion_weights(X_train, y_train)
+
 # Improved fuzzy logic system
 # Define input variables
 feature_density = ctrl.Antecedent(np.arange(0, 1.01, 0.01), "feature_density")
@@ -68,12 +94,12 @@ emotion_signal = ctrl.Antecedent(np.arange(0, 1.01, 0.01), "emotion_signal")
 label_match = ctrl.Consequent(np.arange(0, 6), "label_match")
 
 # Define membership functions for inputs
-feature_density["low"] = fuzz.trimf(feature_density.universe, [0, 0, 0.4])
-feature_density["medium"] = fuzz.trimf(feature_density.universe, [0.2, 0.5, 0.8])
-feature_density["high"] = fuzz.trimf(feature_density.universe, [0.6, 1, 1])
+feature_density["low"] = fuzz.trimf(feature_density.universe, [0, 0, 0.3])
+feature_density["medium"] = fuzz.trimf(feature_density.universe, [0.2, 0.4, 0.7])
+feature_density["high"] = fuzz.trimf(feature_density.universe, [0.5, 0.8, 1])
 
-emotion_signal["weak"] = fuzz.trimf(emotion_signal.universe, [0, 0, 0.4])
-emotion_signal["moderate"] = fuzz.trimf(emotion_signal.universe, [0.3, 0.5, 0.7])
+emotion_signal["weak"] = fuzz.trimf(emotion_signal.universe, [0, 0, 0.3])
+emotion_signal["moderate"] = fuzz.trimf(emotion_signal.universe, [0.2, 0.5, 0.8])
 emotion_signal["strong"] = fuzz.trimf(emotion_signal.universe, [0.6, 1, 1])
 
 # Define membership functions for output - balanced for each emotion
@@ -86,18 +112,25 @@ label_match["surprise"] = fuzz.trimf(label_match.universe, [4.8, 5, 5])
 
 # Define more balanced fuzzy rules
 rules = [
-    ctrl.Rule(
-        feature_density["medium"] & emotion_signal["strong"], label_match["sadness"]
-    ),
     ctrl.Rule(feature_density["high"] & emotion_signal["strong"], label_match["joy"]),
     ctrl.Rule(
-        feature_density["medium"] & emotion_signal["moderate"], label_match["love"]
+        feature_density["medium"] & emotion_signal["strong"], label_match["love"]
     ),
-    ctrl.Rule(feature_density["high"] & emotion_signal["weak"], label_match["anger"]),
-    ctrl.Rule(feature_density["low"] & emotion_signal["moderate"], label_match["fear"]),
     ctrl.Rule(
-        feature_density["medium"] & emotion_signal["weak"], label_match["surprise"]
+        feature_density["high"] & emotion_signal["moderate"], label_match["sadness"]
     ),
+    ctrl.Rule(feature_density["high"] & emotion_signal["strong"], label_match["anger"]),
+    ctrl.Rule(
+        feature_density["medium"] & emotion_signal["strong"], label_match["fear"]
+    ),
+    ctrl.Rule(
+        feature_density["high"] & emotion_signal["moderate"], label_match["surprise"]
+    ),
+    # Additional rules for better coverage
+    ctrl.Rule(
+        feature_density["medium"] & emotion_signal["weak"], label_match["sadness"]
+    ),
+    ctrl.Rule(feature_density["low"] & emotion_signal["strong"], label_match["joy"]),
 ]
 
 # Create control system
@@ -116,14 +149,12 @@ def predict_emotions(X):
         non_zero_features = np.count_nonzero(sample)
         density_score = min(non_zero_features / vocab_size, 1.0)
 
-        # Calculate emotion signals for each class
+        # Calculate weighted emotion signals
         emotion_scores = []
         for emotion in range(6):
-            # Dot product of sample vector with emotion term frequency
-            emotion_score = np.dot(sample, emotion_term_freqs[emotion]) / max(
-                np.sum(sample), 1
-            )
-            emotion_scores.append(emotion_score)
+            weighted_score = np.dot(sample, emotion_weights[emotion])
+            normalized_score = weighted_score / (np.sum(sample) + 1)
+            emotion_scores.append(normalized_score)
 
         # Get the highest emotion signal
         max_emotion_signal = max(emotion_scores) if emotion_scores else 0
@@ -150,10 +181,10 @@ def predict_emotions(X):
     return predictions
 
 
-# Save model components to pickle file
 model_components = {
     "vectorizer": vectorizer,
     "emotion_term_freqs": emotion_term_freqs,
+    "emotion_weights": emotion_weights,
     "vocab_size": vocab_size,
     "emotion_ctrl": emotion_ctrl,
     "label_mapping": {
@@ -165,6 +196,7 @@ model_components = {
         5: "surprise",
     },
 }
+
 
 with open("emotion_model.pkl", "wb") as f:
     pickle.dump(model_components, f)
@@ -243,16 +275,16 @@ label_mapping = {
 }
 target_names = [label_mapping[i] for i in range(len(label_mapping))]
 
-# # Predict emotions
-# y_val_pred = predict_emotions(X_val)
-# y_test_pred = predict_emotions(X_test)
+# Predict emotions
+y_val_pred = predict_emotions(X_val)
+y_test_pred = predict_emotions(X_test)
 
-# # Evaluate the model
-# print("Validation Metrics:")
-# print(classification_report(y_val, y_val_pred, target_names=target_names))
-# print("Validation Accuracy:", accuracy_score(y_val, y_val_pred))
+# Evaluate the model
+print("Validation Metrics:")
+print(classification_report(y_val, y_val_pred, target_names=target_names))
+print("Validation Accuracy:", accuracy_score(y_val, y_val_pred))
 
 
-# print("\nTest Metrics:")
-# print(classification_report(y_test, y_test_pred, target_names=target_names))
-# print("Test Accuracy:", accuracy_score(y_test, y_test_pred))
+print("\nTest Metrics:")
+print(classification_report(y_test, y_test_pred, target_names=target_names))
+print("Test Accuracy:", accuracy_score(y_test, y_test_pred))
